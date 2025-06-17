@@ -16,7 +16,7 @@ export default function Home() {
   const [loadedWordLists, setLoadedWordLists] = useState<{ [key: number]: string[] }>({});
   const [isWordsLoaded, setIsWordsLoaded] = useState(false);
 
-  const [Word, setWord] = useState<string>(""); 
+  const [Word, setWord] = useState<string>("");
 
   const [NumofRows, setNumofRows] = useState(6);
   const [currentRow, setCurrentRow] = useState(0);
@@ -24,7 +24,7 @@ export default function Home() {
   const [gameWon, setGameWon] = useState(false);
   const [gameLost, setGameLost] = useState(false);
   const [screenColor, setScreenColor] = useState('');
-  
+
   const [inputValues, setInputValues] = useState<string[][]>([]);
   const [allLetterColors, setAllLetterColors] = useState<string[][]>([]);
   const [keyboardKeyColors, setKeyboardKeyColors] = useState<{ [key: string]: string }>({});
@@ -166,7 +166,7 @@ export default function Home() {
 
     const targetWordLetters = targetWord.split('');
     const currentRowLetters = currentRowWord.split('');
-    
+
     // First pass: Mark green letters (correct position)
     for (let i = 0; i < Letters; i++) {
       if (currentRowLetters[i] === targetWordLetters[i]) {
@@ -196,7 +196,7 @@ export default function Home() {
         }
       }
     }
-    
+
     // Update keyboard colors for any remaining grey letters
     for (let i = 0; i < Letters; i++) {
         const letter = currentRowWord[i];
@@ -366,11 +366,9 @@ export default function Home() {
       {/* Left Column - Textfields and Game Status */}
       <Stack
         direction="column"
-        component="form"
+        // REMOVE component="form" from here or from child components
         sx={{ width: '43ch', flexShrink: 0 }}
         spacing={1}
-        noValidate
-        autoComplete="off"
       >
         <Rows
           letters={Letters}
@@ -415,9 +413,9 @@ export default function Home() {
               {Word}
             </Typography>
           ) : (
-            <img 
-              src="/WORDLE Logo.png" 
-              alt="WORDLE Logo" 
+            <img
+              src="/WORDLE Logo.png"
+              alt="WORDLE Logo"
               style={{ maxHeight: '350px', width: 'auto' }} // Adjusted size for better fit
             />
           )}
@@ -445,7 +443,7 @@ export default function Home() {
         >
           Reset Game
         </Button>
-        
+
         <Keyboard
           onKeyPress={handleInputLogic}
           keyColors={keyboardKeyColors}
