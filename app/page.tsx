@@ -34,15 +34,15 @@ export default function Home() {
   // NEW STATE FOR LOGO/WORD TOGGLE
   const [showWord, setShowWord] = useState(false);
 
-  // State for mobile detection - Initialize to false for SSR consistency
+  // State for mobile detection
   const [isMobile, setIsMobile] = useState(false);
 
-  // Effect to detect mobile device - Runs only on client after mount
+  // Effect to detect mobile device
   useEffect(() => {
     const userAgent = typeof window.navigator === 'undefined' ? '' : navigator.userAgent;
     const mobile = Boolean(
       userAgent.match(
-        /Android|BlackBerry|iPhone|iPad|iPod|Opera Mini|Windows Phone/i
+        /Android|BlackBerry|iPhone|iPad|IPhone|Opera Mini|Windows Phone/i
       )
     );
     setIsMobile(mobile);
@@ -80,11 +80,9 @@ export default function Home() {
   const getNewRandomWord = useCallback((length: number): string => {
     const wordsForLength = loadedWordLists[length];
     if (wordsForLength && wordsForLength.length > 0) {
-      // Ensure this is only called when words are loaded and stable for the initial render
       return wordsForLength[Math.floor(Math.random() * wordsForLength.length)];
     }
     console.warn(`No words loaded for length ${length}. Using default fallback.`);
-    // Fallback words are less critical for hydration if they only appear after initial client render
     if (length === 2) return "HI";
     if (length === 3) return "TEE";
     if (length === 4) return "FOUR";
@@ -106,15 +104,7 @@ export default function Home() {
     setGameWon(false);
     setGameLost(false);
     setScreenColor('');
-    // Generate the word ONLY after words are loaded AND on the client
-    // To avoid hydration mismatch from Math.random()
-    if (typeof window !== 'undefined') {
-      setWord(getNewRandomWord(Letters));
-    } else {
-      // For SSR, provide a consistent initial word or null/empty state
-      // This word will be immediately replaced on the client side
-      setWord("REACT"); // or any other consistent placeholder
-    }
+    setWord(getNewRandomWord(Letters));
   }, [NumofRows, Letters, isWordsLoaded, getNewRandomWord]);
 
   const decreaseLetters = () => {
@@ -158,8 +148,7 @@ export default function Home() {
   };
 
   const focusInput = useCallback((row: number, col: number) => {
-    // Ensure this only runs on the client
-    if (typeof window !== 'undefined' && inputRefs.current[row] && inputRefs.current[row][col]) {
+    if (inputRefs.current[row] && inputRefs.current[row][col]) {
       inputRefs.current[row][col]?.focus();
     }
   }, []);
@@ -366,7 +355,6 @@ export default function Home() {
     setGameWon(false);
     setGameLost(false);
     setScreenColor('');
-    // Generate a new random word on reset. This is a client-side only action.
     setWord(getNewRandomWord(Letters));
     setTimeout(() => focusInput(0, 0), 0); // Autofocus on the first input
   }, [NumofRows, Letters, focusInput, getNewRandomWord]);
@@ -407,7 +395,7 @@ export default function Home() {
           src="/WORDLE Logo.png"
           alt="WORDLE Logo"
           style={{
-            maxHeight: isMobile ? '70px' : '350px', // Smaller logo for mobile
+            maxHeight: isMobile ? '175px' : '350px', // Smaller logo for mobile
             width: 'auto'
           }}
         />
