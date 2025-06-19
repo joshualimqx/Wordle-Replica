@@ -34,6 +34,20 @@ export default function Home() {
   // NEW STATE FOR LOGO/WORD TOGGLE
   const [showWord, setShowWord] = useState(false);
 
+  // State for mobile detection - Initialize to false for SSR consistency
+  const [isMobile, setIsMobile] = useState(false);
+
+  // Effect to detect mobile device - Runs only on client after mount
+  useEffect(() => {
+    const userAgent = typeof window.navigator === 'undefined' ? '' : navigator.userAgent;
+    const mobile = Boolean(
+      userAgent.match(
+        /Android|BlackBerry|iPhone|iPad|iPod|Opera Mini|Windows Phone/i
+      )
+    );
+    setIsMobile(mobile);
+  }, []);
+
   // Function to fetch words from a file
   const fetchWords = async (length: number) => {
     try {
@@ -66,9 +80,11 @@ export default function Home() {
   const getNewRandomWord = useCallback((length: number): string => {
     const wordsForLength = loadedWordLists[length];
     if (wordsForLength && wordsForLength.length > 0) {
+      // Ensure this is only called when words are loaded and stable for the initial render
       return wordsForLength[Math.floor(Math.random() * wordsForLength.length)];
     }
     console.warn(`No words loaded for length ${length}. Using default fallback.`);
+    // Fallback words are less critical for hydration if they only appear after initial client render
     if (length === 2) return "HI";
     if (length === 3) return "TEE";
     if (length === 4) return "FOUR";
@@ -90,13 +106,22 @@ export default function Home() {
     setGameWon(false);
     setGameLost(false);
     setScreenColor('');
-    setWord(getNewRandomWord(Letters));
+    // Generate the word ONLY after words are loaded AND on the client
+    // To avoid hydration mismatch from Math.random()
+    if (typeof window !== 'undefined') {
+      setWord(getNewRandomWord(Letters));
+    } else {
+      // For SSR, provide a consistent initial word or null/empty state
+      // This word will be immediately replaced on the client side
+      setWord("REACT"); // or any other consistent placeholder
+    }
   }, [NumofRows, Letters, isWordsLoaded, getNewRandomWord]);
 
   const decreaseLetters = () => {
     if (gameWon || gameLost) return;
     if (Letters - 1 < 2) {
-      alert("You cannot have less than 2 letters.");
+      setScreenColor('red');
+      setTimeout(() => setScreenColor(''), 500);
     } else {
       setLettersLength(Letters - 1);
     }
@@ -105,7 +130,8 @@ export default function Home() {
   const increaseLetters = () => {
     if (gameWon || gameLost) return;
     if (Letters + 1 > 6) {
-      alert("You cannot have more than 6 letters.");
+      setScreenColor('red');
+      setTimeout(() => setScreenColor(''), 500);
     } else {
       setLettersLength(Letters + 1);
     }
@@ -114,7 +140,8 @@ export default function Home() {
   const decreaseRows = () => {
     if (gameWon || gameLost) return;
     if (NumofRows - 1 < 2) {
-      alert("You cannot have less than 2 rows.");
+      setScreenColor('red');
+      setTimeout(() => setScreenColor(''), 500);
     } else {
       setNumofRows(NumofRows - 1);
     }
@@ -123,14 +150,16 @@ export default function Home() {
   const increaseRows = () => {
     if (gameWon || gameLost) return;
     if (NumofRows + 1 > 8) {
-      alert("You cannot have more than 8 rows.");
+      setScreenColor('red');
+      setTimeout(() => setScreenColor(''), 500);
     } else {
       setNumofRows(NumofRows + 1);
     }
   };
 
   const focusInput = useCallback((row: number, col: number) => {
-    if (inputRefs.current[row] && inputRefs.current[row][col]) {
+    // Ensure this only runs on the client
+    if (typeof window !== 'undefined' && inputRefs.current[row] && inputRefs.current[row][col]) {
       inputRefs.current[row][col]?.focus();
     }
   }, []);
@@ -307,13 +336,14 @@ export default function Home() {
   // Handler for physical keyboard events - now wrapped in useCallback
   const handlePhysicalKeyDown = useCallback((event: KeyboardEvent) => {
     if (gameWon || gameLost) return; // Prevent input if game is over
+    if (isMobile) return; // Prevent physical keyboard input on mobile
 
     // Prevent default behavior for physical backspace/enter only if we are handling it
     if (event.key === 'Backspace' || event.key === 'Enter' || (event.key.length === 1 && /[A-Za-z]/.test(event.key))) {
       event.preventDefault(); // Prevent browser's default backspace behavior (e.g., navigating back)
       handleInputLogic(event.key.toUpperCase()); // Ensure key is uppercase for consistency
     }
-  }, [gameWon, gameLost, handleInputLogic]);
+  }, [gameWon, gameLost, isMobile, handleInputLogic]);
 
 
   // Add event listener for physical keyboard
@@ -336,6 +366,7 @@ export default function Home() {
     setGameWon(false);
     setGameLost(false);
     setScreenColor('');
+    // Generate a new random word on reset. This is a client-side only action.
     setWord(getNewRandomWord(Letters));
     setTimeout(() => focusInput(0, 0), 0); // Autofocus on the first input
   }, [NumofRows, Letters, focusInput, getNewRandomWord]);
@@ -348,108 +379,187 @@ export default function Home() {
     }
   }, [Letters, NumofRows, currentRow, currentCol, isWordsLoaded, gameWon, gameLost, focusInput]);
 
+  // Handler for showing/hiding the word on click
+  const handleLogoClick = () => {
+    setShowWord(prev => !prev); // Toggle the showWord state
+  };
+
+  // Define components for easier reordering
+  const logoSection = (
+    <Box
+      onClick={handleLogoClick}
+      sx={{
+        cursor: 'pointer',
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        height: isMobile ? '80px' : '120px', // Smaller height for mobile
+        mb: isMobile ? 1 : 2, // Smaller margin-bottom for mobile
+        mt: isMobile ? 1 : 0 // Small top margin for mobile
+      }}
+    >
+      {showWord ? (
+        <Typography variant={isMobile ? "h4" : "h1"} component="h2" align="center">
+          {Word}
+        </Typography>
+      ) : (
+        <img
+          src="/WORDLE Logo.png"
+          alt="WORDLE Logo"
+          style={{
+            maxHeight: isMobile ? '70px' : '350px', // Smaller logo for mobile
+            width: 'auto'
+          }}
+        />
+      )}
+    </Box>
+  );
+
+  const textFieldsSection = (
+    <Stack
+      direction="column"
+      // Change: Remove fixed width and use maxWidth + alignItems for centering
+      sx={{
+        width: 'auto', // Allow content to determine width
+        maxWidth: '100%', // Take full available width for centering
+        flexShrink: 0,
+        alignItems: 'center', // Center the Rows component horizontally
+      }}
+      spacing={1}
+    >
+      <Rows
+        letters={Letters}
+        rows={NumofRows}
+        inputRefs={inputRefs}
+        inputValues={inputValues}
+        currentRow={currentRow}
+        onInput={() => {}}
+        onKeyDown={() => {}}
+        disabled={gameWon || gameLost || !isWordsLoaded}
+        allLetterColors={allLetterColors}
+        onLetterClick={handleLetterClick}
+        isMobile={isMobile}
+      />
+
+      {gameWon && (
+        <Typography variant="h4" component="h3" align="center" sx={{ mt: 2, color: 'green', fontSize: isMobile ? '1.2rem' : 'inherit' }}>
+          You won! Congratulations!
+        </Typography>
+      )}
+      {gameLost && (
+          <Typography variant="h4" component="h3" align="center" sx={{ mt: 2, color: 'red', fontSize: isMobile ? '1.2rem' : 'inherit' }}>
+              You lost! The word was "{Word}".
+          </Typography>
+      )}
+    </Stack>
+  );
+
+  const keyboardSection = (
+    // Change: Ensure Keyboard container takes full width and centers its content
+    <Box
+      sx={{
+        width: '100%', // Allow keyboard to take full width
+        display: 'flex', // Use flexbox
+        justifyContent: 'center', // Center the keyboard content
+        mt: isMobile ? 2 : 4, // Add some top margin, more on desktop
+        mb: isMobile ? 2 : 0, // Add bottom margin for mobile, none for desktop
+        px: isMobile ? 0 : 2, // Add horizontal padding on desktop if needed, none on mobile
+      }}
+    >
+      <Keyboard
+        onKeyPress={handleInputLogic}
+        keyColors={keyboardKeyColors}
+        disabled={gameWon || gameLost || !isWordsLoaded}
+      />
+    </Box>
+  );
+
+  const controlsSection = (
+    <Card size="sm" sx={{
+      width: isMobile ? '90%' : '100%', // Adjust width for mobile
+      maxWidth: 500,
+      margin: 'auto', // This helps center the card itself
+      padding: isMobile ? '5px' : '10px', // Smaller padding for mobile
+      display: 'flex',
+      flexDirection: 'column', // Stack buttons vertically on mobile
+      justifyContent: 'center',
+      alignItems: 'center'
+    }}>
+      {/* Changed flexDirection to 'row' and added justifyContent for spacing */}
+      <Cardcontent orientation="horizontal" sx={{ flexDirection: 'row', gap: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <Button variant="contained" onClick={decreaseLetters} disabled={gameWon || gameLost}>Decrease Letters</Button>
+        <h6 style={{ textAlign: 'center'}}>{Letters}</h6>
+        <Button variant="contained" onClick={increaseLetters} disabled={gameWon || gameLost}>Increase Letters</Button>
+      </Cardcontent>
+      {/* Changed flexDirection to 'row' and added justifyContent for spacing */}
+      <Cardcontent orientation="horizontal" sx={{ flexDirection: 'row', gap: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <Button variant="contained" onClick={decreaseRows} disabled={gameWon || gameLost}>Decrease Rows</Button>
+        <h6 style={{ textAlign: 'center' }}>{NumofRows}</h6>
+        <Button variant="contained" onClick={increaseRows} disabled={gameWon || gameLost}>Increase Rows</Button>
+      </Cardcontent>
+    </Card>
+  );
+
+  const resetButton = (
+    <Button
+      variant="contained"
+      color="primary"
+      onClick={resetGame}
+      sx={{ mt: isMobile ? 1 : 2, width: isMobile ? 'auto' : 'auto' }} // Adjust margin for mobile
+      disabled={!isWordsLoaded}
+    >
+      Reset Game
+    </Button>
+  );
+
+
   return (
     <Box
       sx={{
         display: 'flex',
-        flexDirection: 'row',
+        flexDirection: isMobile ? 'column' : 'row', // Change direction based on mobile
         justifyContent: 'center',
         alignItems: 'center',
         minHeight: '100vh',
         overflowY: 'auto',
         backgroundColor: screenColor,
         transition: 'background-color 0.5s ease',
-        paddingY: '20px',
-        gap: 4,
+        paddingY: isMobile ? '0px' : '20px', // Adjust padding for mobile
+        gap: isMobile ? 0 : 4, // Adjust gap for mobile
       }}
     >
-      {/* Left Column - Textfields and Game Status */}
-      <Stack
-        direction="column"
-        // REMOVE component="form" from here or from child components
-        sx={{ width: '43ch', flexShrink: 0 }}
-        spacing={1}
-      >
-        <Rows
-          letters={Letters}
-          rows={NumofRows}
-          inputRefs={inputRefs}
-          inputValues={inputValues}
-          currentRow={currentRow}
-          onInput={() => {}}
-          onKeyDown={() => {}}
-          disabled={gameWon || gameLost || !isWordsLoaded}
-          allLetterColors={allLetterColors}
-          onLetterClick={handleLetterClick}
-        />
+      {/* Mobile Order: Logo, Textfields, Keyboard, Buttons */}
+      {isMobile ? (
+        <>
+          {logoSection}
+          {textFieldsSection}
+          {keyboardSection} {/* Keyboard is a separate section on mobile */}
+          {controlsSection}
+          {resetButton}
+        </>
+      ) : (
+        <>
+          {/* Desktop Order: Textfields (Left), Controls & Keyboard (Right) */}
+          <Stack
+            direction="column"
+            sx={{ width: 'auto', maxWidth: '43ch', flexShrink: 0, alignItems: 'center' }} // Set textfields stack to auto width and center its content
+            spacing={1}
+          >
+            {textFieldsSection}
+          </Stack>
 
-        {gameWon && (
-          <Typography variant="h4" component="h3" align="center" sx={{ mt: 2, color: 'green' }}>
-            You won! Congratulations!
-          </Typography>
-        )}
-        {gameLost && (
-            <Typography variant="h4" component="h3" align="center" sx={{ mt: 2, color: 'red' }}>
-                You lost! The word was "{Word}".
-            </Typography>
-        )}
-      </Stack>
-
-      {/* Right Column - Controls and Keyboard */}
-      <Stack
-        direction="column"
-        sx={{ flexShrink: 0, alignItems: 'center' }}
-        spacing={2}
-      >
-        {/* CONDITIONAL RENDERING FOR LOGO/WORD */}
-        <Box
-          onMouseDown={() => setShowWord(true)}
-          onMouseUp={() => setShowWord(false)}
-          onMouseLeave={() => setShowWord(false)} // Added to handle mouse leaving while pressed
-          sx={{ cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', height: '120px'}} // Added height to prevent layout shift
-        >
-          {showWord ? (
-            <Typography variant="h1" component="h2" align="center">
-              {Word}
-            </Typography>
-          ) : (
-            <img
-              src="/WORDLE Logo.png"
-              alt="WORDLE Logo"
-              style={{ maxHeight: '350px', width: 'auto' }} // Adjusted size for better fit
-            />
-          )}
-        </Box>
-
-        <Card size="sm" sx={{ width: '100%', maxWidth: 500, margin: 'auto', padding: '10px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-          <Cardcontent orientation="horizontal">
-            <Button variant="contained" sx={{ marginBottom: '10px' }} onClick={decreaseLetters} disabled={gameWon || gameLost}>Decrease Letters</Button>
-            <h6 style={{ textAlign: 'center'}}>{Letters}</h6>
-            <Button variant="contained" sx={{ marginBottom: '10px' }} onClick={increaseLetters} disabled={gameWon || gameLost}>Increase Letters</Button>
-          </Cardcontent>
-          <Cardcontent orientation="horizontal">
-            <Button variant="contained" sx={{ marginBottom: '0px' }} onClick={decreaseRows} disabled={gameWon || gameLost}>Decrease Rows</Button>
-            <h6 style={{ textAlign: 'center' }}>{NumofRows}</h6>
-            <Button variant="contained" sx={{ marginBottom: '0px' }} onClick={increaseRows} disabled={gameWon || gameLost}>Increase Rows</Button>
-          </Cardcontent>
-        </Card>
-
-        <Button
-          variant="contained"
-          color="primary"
-          onClick={resetGame}
-          sx={{ mt: 2 }}
-          disabled={!isWordsLoaded}
-        >
-          Reset Game
-        </Button>
-
-        <Keyboard
-          onKeyPress={handleInputLogic}
-          keyColors={keyboardKeyColors}
-          disabled={gameWon || gameLost || !isWordsLoaded}
-        />
-      </Stack>
+          <Stack
+            direction="column"
+            sx={{ flexShrink: 0, alignItems: 'center', width: 'auto', maxWidth: '100%' }} // Ensure right stack takes available width and centers content
+            spacing={2}
+          >
+            {logoSection}
+            {controlsSection}
+            {resetButton}
+            {keyboardSection} {/* Keyboard is part of the right stack on desktop */}
+          </Stack>
+        </>
+      )}
     </Box>
   );
 }

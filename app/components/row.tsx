@@ -11,11 +11,12 @@ interface props {
   onInput: (row: number, col: number, value: string) => void;
   onKeyDown: (row: number, col: number, key: string) => void;
   disabled: boolean;
-  letterColors: string[]; // New prop for array of colors for each letter in this row
-  onLetterClick: (row: number, col: number) => void; // New prop for handling letter clicks
+  letterColors: string[];
+  onLetterClick: (row: number, col: number) => void;
+  isMobile: boolean; // New prop
 }
 
-export default function Row({ letters, rowIndex, inputRefs, inputValues, isCurrentRow, onInput, onKeyDown, disabled, letterColors, onLetterClick }: props) {
+export default function Row({ letters, rowIndex, inputRefs, inputValues, isCurrentRow, onInput, onKeyDown, disabled, letterColors, onLetterClick, isMobile }: props) {
   function DynamicLetters() {
     return (
       <>
@@ -29,8 +30,9 @@ export default function Row({ letters, rowIndex, inputRefs, inputValues, isCurre
             disabled={disabled || !isCurrentRow}
             onInput={onInput}
             onKeyDown={onKeyDown}
-            letterColor={letterColors[i] || 'transparent'} // Pass individual letter color
-            onClick={onLetterClick} // Pass the onClick handler
+            letterColor={letterColors[i] || 'transparent'}
+            onClick={onLetterClick}
+            isMobile={isMobile} // Pass to Letter
           />
         ))}
       </>
@@ -41,7 +43,11 @@ export default function Row({ letters, rowIndex, inputRefs, inputValues, isCurre
     <Stack
       direction="row"
       component="form"
-      sx={{ width: '40ch' }}
+      sx={{
+        width: 'auto', // Removed fixed width from here too
+        justifyContent: 'center', // Center the letters within the row
+        flexGrow: 1, // Allow rows to grow and fill space if needed
+      }}
       spacing={1}
       noValidate
       autoComplete="off"

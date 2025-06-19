@@ -11,11 +11,12 @@ interface props {
   onInput: (row: number, col: number, value: string) => void;
   onKeyDown: (row: number, col: number, key: string) => void;
   disabled: boolean;
-  allLetterColors: string[][]; // New prop for 2D array of colors for the entire grid
-  onLetterClick: (row: number, col: number) => void; // New prop for handling letter clicks
+  allLetterColors: string[][];
+  onLetterClick: (row: number, col: number) => void;
+  isMobile: boolean; // New prop
 }
 
-export default function Rows({ letters, rows, inputRefs, inputValues, currentRow, onInput, onKeyDown, disabled, allLetterColors, onLetterClick }: props) {
+export default function Rows({ letters, rows, inputRefs, inputValues, currentRow, onInput, onKeyDown, disabled, allLetterColors, onLetterClick, isMobile }: props) {
   function DynamicRows() {
     return (
       <>
@@ -30,8 +31,9 @@ export default function Rows({ letters, rows, inputRefs, inputValues, currentRow
             onInput={onInput}
             onKeyDown={onKeyDown}
             disabled={disabled}
-            letterColors={allLetterColors[i] || []} // Pass the array of colors for this specific row
-            onLetterClick={onLetterClick} // Pass the click handler to Row
+            letterColors={allLetterColors[i] || []}
+            onLetterClick={onLetterClick}
+            isMobile={isMobile} // Pass to Row
           />
         ))}
       </>
