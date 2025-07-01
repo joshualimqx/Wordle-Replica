@@ -7,8 +7,10 @@ import Stack from '@mui/material/Stack';
 import Box from '@mui/material/Box';
 import Rows from './components/rows';
 import Typography from '@mui/material/Typography';
-import Card from '@mui/joy/Card';
-import Cardcontent from '@mui/joy/CardContent';
+import Card from '@mui/joy/Card'; // Keep joy Card for controls
+import MuiCard from '@mui/material/Card'; // Use MuiCard for logo/definition
+import Cardcontent from '@mui/joy/CardContent'; // Keep joy CardContent for controls
+import MuiCardContent from '@mui/material/CardContent'; // Use MuiCardContent for logo/definition
 import Keyboard from './components/keyboard'; // Import the Keyboard component
 
 export default function Home() {
@@ -17,10 +19,12 @@ export default function Home() {
   const [isWordsLoaded, setIsWordsLoaded] = useState(false);
 
   const [Word, setWord] = useState<string>("");
+  const [wordDefinition, setWordDefinition] = useState<string | null>(null);
+  const [isDefinitionLoading, setIsDefinitionLoading] = useState(false);
 
   const [NumofRows, setNumofRows] = useState(6);
   const [currentRow, setCurrentRow] = useState(0);
-  const [currentCol, setCurrentCol] = useState(0); // This now tracks the focused column
+  const [currentCol, setCurrentCol] = useState(0);
   const [gameWon, setGameWon] = useState(false);
   const [gameLost, setGameLost] = useState(false);
   const [screenColor, setScreenColor] = useState('');
@@ -31,13 +35,11 @@ export default function Home() {
 
   const inputRefs = useRef<(HTMLInputElement | null)[][]>([]);
 
-  // NEW STATE FOR LOGO/WORD TOGGLE
   const [showWord, setShowWord] = useState(false);
+  const [showDefinitionCard, setShowDefinitionCard] = useState(false); // New state for definition card visibility
 
-  // State for mobile detection
   const [isMobile, setIsMobile] = useState(false);
 
-  // Effect to detect mobile device
   useEffect(() => {
     const userAgent = typeof window.navigator === 'undefined' ? '' : navigator.userAgent;
     const mobile = Boolean(
@@ -48,7 +50,6 @@ export default function Home() {
     setIsMobile(mobile);
   }, []);
 
-  // Function to fetch words from a file
   const fetchWords = async (length: number) => {
     try {
       const response = await fetch(`/words/${length}.txt`);
@@ -63,7 +64,6 @@ export default function Home() {
     }
   };
 
-  // Effect to load words when component mounts
   useEffect(() => {
     const loadAllWords = async () => {
       const allWords: { [key: number]: string[] } = {};
@@ -76,7 +76,6 @@ export default function Home() {
     loadAllWords();
   }, []);
 
-  // Helper function to get a new random word based on letters length from loaded words
   const getNewRandomWord = useCallback((length: number): string => {
     const wordsForLength = loadedWordLists[length];
     if (wordsForLength && wordsForLength.length > 0) {
@@ -91,7 +90,52 @@ export default function Home() {
     return "WORD";
   }, [loadedWordLists]);
 
-  // Initialize game state when grid size changes or words are loaded
+  const fetchWordDefinition = useCallback(async (word: string): Promise<string | null> => {
+    try {
+      const response = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${word}`);
+      if (!response.ok) {
+        return null;
+      }
+      const data = await response.json();
+      if (data && Array.isArray(data) && data.length > 0 && data[0].meanings && data[0].meanings.length > 0) {
+        for (const meaning of data[0].meanings) {
+          if (meaning.definitions && meaning.definitions.length > 0 && meaning.definitions[0].definition) {
+            return meaning.definitions[0].definition;
+          }
+        }
+      }
+      return null;
+    } catch (error) {
+      console.error(`Error fetching definition for "${word}":`, error);
+      return null;
+    }
+  }, []);
+
+  const findWordWithDefinition = useCallback(async (length: number) => {
+    setIsDefinitionLoading(true);
+    let foundDefinition = null;
+    let selectedWord = "";
+    const maxRetries = 20;
+    let retries = 0;
+
+    while (foundDefinition === null && retries < maxRetries) {
+      const newWord = getNewRandomWord(length);
+      selectedWord = newWord;
+      foundDefinition = await fetchWordDefinition(newWord);
+      retries++;
+    }
+
+    if (foundDefinition) {
+      setWord(selectedWord);
+      setWordDefinition(foundDefinition);
+    } else {
+      console.error(`Could not find a word with a definition after ${maxRetries} retries. Using "${selectedWord || getNewRandomWord(length)}" without definition.`);
+      setWord(selectedWord || getNewRandomWord(length));
+      setWordDefinition(null);
+    }
+    setIsDefinitionLoading(false);
+  }, [getNewRandomWord, fetchWordDefinition]);
+
   useEffect(() => {
     if (!isWordsLoaded) return;
 
@@ -104,8 +148,10 @@ export default function Home() {
     setGameWon(false);
     setGameLost(false);
     setScreenColor('');
-    setWord(getNewRandomWord(Letters));
-  }, [NumofRows, Letters, isWordsLoaded, getNewRandomWord]);
+    setWordDefinition(null);
+    setShowDefinitionCard(false); // Reset definition card visibility
+    findWordWithDefinition(Letters);
+  }, [NumofRows, Letters, isWordsLoaded, findWordWithDefinition]);
 
   const decreaseLetters = () => {
     if (gameWon || gameLost) return;
@@ -185,29 +231,25 @@ export default function Home() {
     const targetWordLetters = targetWord.split('');
     const currentRowLetters = currentRowWord.split('');
 
-    // First pass: Mark green letters (correct position)
     for (let i = 0; i < Letters; i++) {
       if (currentRowLetters[i] === targetWordLetters[i]) {
         newRowColors[i] = 'green';
         newKeyboardKeyColors[currentRowLetters[i]] = 'green';
-        targetWordLetters[i] = ''; // Mark as used
-        currentRowLetters[i] = ''; // Mark as used
+        targetWordLetters[i] = '';
+        currentRowLetters[i] = '';
       }
     }
 
-    // Second pass: Mark orange letters (correct letter, wrong position)
     for (let i = 0; i < Letters; i++) {
-      if (currentRowLetters[i] !== '') { // If not already green
+      if (currentRowLetters[i] !== '') {
         const targetIndex = targetWordLetters.indexOf(currentRowLetters[i]);
         if (targetIndex !== -1) {
           newRowColors[i] = 'orange';
-          // Only update to orange if not already green on keyboard
           if (newKeyboardKeyColors[currentRowLetters[i]] !== 'green') {
             newKeyboardKeyColors[currentRowLetters[i]] = 'orange';
           }
-          targetWordLetters[targetIndex] = ''; // Mark as used
+          targetWordLetters[targetIndex] = '';
         } else {
-          // If letter is not in word at all, mark grey on keyboard
           if (newKeyboardKeyColors[currentRowLetters[i]] !== 'green' && newKeyboardKeyColors[currentRowLetters[i]] !== 'orange') {
             newKeyboardKeyColors[currentRowLetters[i]] = 'grey';
           }
@@ -215,10 +257,9 @@ export default function Home() {
       }
     }
 
-    // Update keyboard colors for any remaining grey letters
     for (let i = 0; i < Letters; i++) {
         const letter = currentRowWord[i];
-        if (newKeyboardKeyColors[letter] === undefined) { // If not already set by green or orange
+        if (newKeyboardKeyColors[letter] === undefined) {
              newKeyboardKeyColors[letter] = 'grey';
         }
     }
@@ -232,30 +273,29 @@ export default function Home() {
 
     if (currentRowWord === targetWord) {
       setScreenColor('green');
-      setGameWon(true); // Player won
+      setGameWon(true);
+      setShowDefinitionCard(true); // Show definition card on win
       setTimeout(() => setScreenColor(''), 500);
     } else {
       if (currentRow < NumofRows - 1) {
         setCurrentRow(currentRow + 1);
-        setCurrentCol(0); // Reset currentCol for the new row
-        setTimeout(() => focusInput(currentRow + 1, 0), 100); // Autofocus on the first input of the new row
-      } else {
-        // Player did not win and reached the last row, so they lost.
+        setCurrentCol(0);
+        setTimeout(() => focusInput(currentRow + 1, 0), 100);
+      }
+      else {
         setGameLost(true);
-        setScreenColor('red'); // Optionally flash red for loss
+        setScreenColor('red');
+        setShowDefinitionCard(true); // Show definition card on lose
         setTimeout(() => setScreenColor(''), 500);
       }
     }
   }, [Letters, NumofRows, Word, currentRow, inputValues, keyboardKeyColors, focusInput]);
 
-  // Unified handler for both physical and virtual keyboard inputs
   const handleInputLogic = useCallback((key: string) => {
-    if (gameWon || gameLost) return; // Prevent input if game is over
-
+    if (gameWon || gameLost || isDefinitionLoading) return;
     let activeRow = currentRow;
     let activeCol = currentCol;
 
-    // Use the actual focused element to determine current position, if available
     const focusedElement = document.activeElement;
     if (focusedElement && focusedElement.tagName === 'INPUT') {
       const id = focusedElement.id;
@@ -266,9 +306,8 @@ export default function Home() {
       }
     }
 
-    // Ensure operations are only on the current playable row
     if (activeRow !== currentRow) {
-      focusInput(currentRow, currentCol); // Re-focus on the intended current input
+      focusInput(currentRow, currentCol);
       return;
     }
 
@@ -280,28 +319,25 @@ export default function Home() {
           setCurrentCol(nextCol);
           focusInput(activeRow, nextCol);
         } else {
-          setCurrentCol(activeCol); // Stay on the last column if at end
-          focusInput(activeRow, activeCol); // Re-focus the last column
+          setCurrentCol(activeCol);
+          focusInput(activeRow, activeCol);
         }
       }
     } else if (key === 'BACKSPACE' || key === 'DEL') {
       let targetColToClear = activeCol;
 
-      // If the current field is empty, and we can move back, target the previous field
       if (inputValues[activeRow][activeCol] === '' && activeCol > 0) {
         targetColToClear = activeCol - 1;
       }
-      // If at column 0 and it's empty, do nothing
       else if (activeCol === 0 && inputValues[activeRow][activeCol] === '') {
         return;
       }
 
-      // Perform the deletion
       if (inputValues[activeRow][targetColToClear] !== '') {
         updateInputValue(activeRow, targetColToClear, '');
-        setCurrentCol(targetColToClear); // Update currentCol to reflect the deletion position
+        setCurrentCol(targetColToClear);
         focusInput(activeRow, targetColToClear);
-      } else if (targetColToClear > 0) { // If the target was also empty, but we can move back further
+      } else if (targetColToClear > 0) {
           const prevCol = targetColToClear - 1;
           updateInputValue(activeRow, prevCol, '');
           setCurrentCol(prevCol);
@@ -310,32 +346,27 @@ export default function Home() {
 
     } else if (key === 'ENTER') {
       const enteredWord = inputValues[currentRow].join('');
-      // Check if the entered word exists in the loaded word list for the current letter length
       const wordsForCurrentLength = loadedWordLists[Letters];
       if (wordsForCurrentLength && wordsForCurrentLength.includes(enteredWord)) {
         checkWord();
       } else {
-        // Provide feedback to the user if the word is not found
-        setScreenColor('red'); // Flash red for invalid word
+        setScreenColor('red');
         setTimeout(() => setScreenColor(''), 500);
       }
     }
-  }, [currentRow, currentCol, Letters, inputValues, gameWon, gameLost, loadedWordLists, focusInput, checkWord]);
+  }, [currentRow, currentCol, Letters, inputValues, gameWon, gameLost, isDefinitionLoading, loadedWordLists, focusInput, checkWord]);
 
-  // Handler for physical keyboard events - now wrapped in useCallback
   const handlePhysicalKeyDown = useCallback((event: KeyboardEvent) => {
-    if (gameWon || gameLost) return; // Prevent input if game is over
-    if (isMobile) return; // Prevent physical keyboard input on mobile
+    if (gameWon || gameLost || isDefinitionLoading) return;
+    if (isMobile) return;
 
-    // Prevent default behavior for physical backspace/enter only if we are handling it
     if (event.key === 'Backspace' || event.key === 'Enter' || (event.key.length === 1 && /[A-Za-z]/.test(event.key))) {
-      event.preventDefault(); // Prevent browser's default backspace behavior (e.g., navigating back)
-      handleInputLogic(event.key.toUpperCase()); // Ensure key is uppercase for consistency
+      event.preventDefault();
+      handleInputLogic(event.key.toUpperCase());
     }
-  }, [gameWon, gameLost, isMobile, handleInputLogic]);
+  }, [gameWon, gameLost, isDefinitionLoading, isMobile, handleInputLogic]);
 
 
-  // Add event listener for physical keyboard
   useEffect(() => {
     window.addEventListener('keydown', handlePhysicalKeyDown);
     return () => {
@@ -343,8 +374,6 @@ export default function Home() {
     };
   }, [handlePhysicalKeyDown]);
 
-
-  // Reset logic
   const resetGame = useCallback(() => {
     inputRefs.current = Array(NumofRows).fill(null).map(() => Array(Letters).fill(null));
     setInputValues(Array(NumofRows).fill(null).map(() => Array(Letters).fill('')));
@@ -355,35 +384,34 @@ export default function Home() {
     setGameWon(false);
     setGameLost(false);
     setScreenColor('');
-    setWord(getNewRandomWord(Letters));
-    setTimeout(() => focusInput(0, 0), 0); // Autofocus on the first input
-  }, [NumofRows, Letters, focusInput, getNewRandomWord]);
+    setWordDefinition(null);
+    setShowDefinitionCard(false); // Reset definition card visibility
+    findWordWithDefinition(Letters);
+    setTimeout(() => focusInput(0, 0), 0);
+  }, [NumofRows, Letters, focusInput, findWordWithDefinition]);
 
-
-  // Initial focus on mount and when grid changes
   useEffect(() => {
     if (isWordsLoaded && !gameWon && !gameLost) {
-      focusInput(currentRow, currentCol); // Autofocus based on current state
+      focusInput(currentRow, currentCol);
     }
   }, [Letters, NumofRows, currentRow, currentCol, isWordsLoaded, gameWon, gameLost, focusInput]);
 
-  // Handler for showing/hiding the word on click
   const handleLogoClick = () => {
-    setShowWord(prev => !prev); // Toggle the showWord state
+    setShowWord(prev => !prev);
   };
 
-  // Define components for easier reordering
   const logoSection = (
     <Box
       onClick={handleLogoClick}
       sx={{
         cursor: 'pointer',
         display: 'flex',
+        flexDirection: 'column',
         justifyContent: 'center',
         alignItems: 'center',
-        height: isMobile ? '80px' : '120px', // Smaller height for mobile
-        mb: isMobile ? 1 : 2, // Smaller margin-bottom for mobile
-        mt: isMobile ? 1 : 0 // Small top margin for mobile
+        height: isMobile ? '80px' : '120px',
+        mb: isMobile ? 1 : 2,
+        mt: isMobile ? 1 : 0,
       }}
     >
       {showWord ? (
@@ -395,7 +423,7 @@ export default function Home() {
           src="/WORDLE Logo.png"
           alt="WORDLE Logo"
           style={{
-            maxHeight: isMobile ? '175px' : '350px', // Smaller logo for mobile
+            maxHeight: isMobile ? '175px' : '350px',
             width: 'auto'
           }}
         />
@@ -406,12 +434,11 @@ export default function Home() {
   const textFieldsSection = (
     <Stack
       direction="column"
-      // Change: Remove fixed width and use maxWidth + alignItems for centering
       sx={{
-        width: 'auto', // Allow content to determine width
-        maxWidth: '100%', // Take full available width for centering
+        width: 'auto',
+        maxWidth: '100%',
         flexShrink: 0,
-        alignItems: 'center', // Center the Rows component horizontally
+        alignItems: 'center',
       }}
       spacing={1}
     >
@@ -423,67 +450,88 @@ export default function Home() {
         currentRow={currentRow}
         onInput={() => {}}
         onKeyDown={() => {}}
-        disabled={gameWon || gameLost || !isWordsLoaded}
+        disabled={gameWon || gameLost || !isWordsLoaded || isDefinitionLoading}
         allLetterColors={allLetterColors}
         onLetterClick={handleLetterClick}
         isMobile={isMobile}
       />
 
-      {gameWon && (
-        <Typography variant="h4" component="h3" align="center" sx={{ mt: 2, color: 'green', fontSize: isMobile ? '1.2rem' : 'inherit' }}>
-          You won! Congratulations!
-        </Typography>
-      )}
-      {gameLost && (
-          <Typography variant="h4" component="h3" align="center" sx={{ mt: 2, color: 'red', fontSize: isMobile ? '1.2rem' : 'inherit' }}>
-              You lost! The word was "{Word}".
-          </Typography>
+      {(gameWon || gameLost) && (
+        <MuiCard sx={{ mt: 2, p: 2, width: '40ch', textAlign: 'center' }}> {/* Changed width to '40ch' */}
+          <MuiCardContent sx={{ p: 1, '&:last-child': { pb: 1 } }}>
+            {gameWon && (
+              <Typography variant="h5" component="h3" align="center" sx={{ mb: 1, color: 'green' }}>
+                You won! Congratulations!
+              </Typography>
+            )}
+            {gameLost && (
+                <Typography variant="h5" component="h3" align="center" sx={{ mb: 1, color: 'red' }}>
+                    You lost!
+                </Typography>
+            )}
+            <Typography variant="h6" component="h4" sx={{ mb: 1 }}>
+              The word was: {Word}
+            </Typography>
+            {isDefinitionLoading && (
+              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                Loading definition...
+              </Typography>
+            )}
+            {wordDefinition && !isDefinitionLoading && (
+              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                {wordDefinition}
+              </Typography>
+            )}
+            {!wordDefinition && !isDefinitionLoading && Word && (
+              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                No definition found.
+              </Typography>
+            )}
+          </MuiCardContent>
+        </MuiCard>
       )}
     </Stack>
   );
 
   const keyboardSection = (
-    // Change: Ensure Keyboard container takes full width and centers its content
     <Box
       sx={{
-        width: '100%', // Allow keyboard to take full width
-        display: 'flex', // Use flexbox
-        justifyContent: 'center', // Center the keyboard content
-        mt: isMobile ? 2 : 4, // Add some top margin, more on desktop
-        mb: isMobile ? 2 : 0, // Add bottom margin for mobile, none for desktop
-        px: isMobile ? 0 : 2, // Add horizontal padding on desktop if needed, none on mobile
+        width: '100%',
+        display: 'flex',
+        justifyContent: 'center',
+        mt: isMobile ? 2 : 4,
+        mb: isMobile ? 2 : 0,
+        px: isMobile ? 0 : 2,
       }}
     >
       <Keyboard
         onKeyPress={handleInputLogic}
         keyColors={keyboardKeyColors}
-        disabled={gameWon || gameLost || !isWordsLoaded}
+        disabled={gameWon || gameLost || !isWordsLoaded || isDefinitionLoading}
       />
     </Box>
   );
 
   const controlsSection = (
     <Card size="sm" sx={{
-      width: isMobile ? '90%' : '100%', // Adjust width for mobile
+      width: isMobile ? '90%' : '100%',
       maxWidth: 500,
-      margin: 'auto', // This helps center the card itself
-      padding: isMobile ? '5px' : '10px', // Smaller padding for mobile
+      margin: 'auto',
+      padding: isMobile ? '5px' : '10px',
       display: 'flex',
-      flexDirection: 'column', // Stack buttons vertically on mobile
+      flexDirection: 'column',
       justifyContent: 'center',
       alignItems: 'center'
     }}>
-      {/* Changed flexDirection to 'row' and added justifyContent for spacing */}
       <Cardcontent orientation="horizontal" sx={{ flexDirection: 'row', gap: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <Button variant="contained" onClick={decreaseLetters} disabled={gameWon || gameLost}>Decrease Letters</Button>
+        <Button variant="contained" onClick={decreaseLetters} disabled={gameWon || gameLost || isDefinitionLoading}>Decrease Letters</Button>
         <h6 style={{ textAlign: 'center'}}>{Letters}</h6>
-        <Button variant="contained" onClick={increaseLetters} disabled={gameWon || gameLost}>Increase Letters</Button>
+        <Button variant="contained" onClick={increaseLetters} disabled={gameWon || gameLost || isDefinitionLoading}>Increase Letters</Button>
       </Cardcontent>
-      {/* Changed flexDirection to 'row' and added justifyContent for spacing */}
       <Cardcontent orientation="horizontal" sx={{ flexDirection: 'row', gap: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <Button variant="contained" onClick={decreaseRows} disabled={gameWon || gameLost}>Decrease Rows</Button>
+        <Button variant="contained" onClick={decreaseRows} disabled={gameWon || gameLost || isDefinitionLoading}>Decrease Rows</Button>
         <h6 style={{ textAlign: 'center' }}>{NumofRows}</h6>
-        <Button variant="contained" onClick={increaseRows} disabled={gameWon || gameLost}>Increase Rows</Button>
+        <Button variant="contained" onClick={increaseRows} disabled={gameWon || gameLost || isDefinitionLoading}>Increase Rows</Button>
       </Cardcontent>
     </Card>
   );
@@ -493,44 +541,41 @@ export default function Home() {
       variant="contained"
       color="primary"
       onClick={resetGame}
-      sx={{ mt: isMobile ? 1 : 2, width: isMobile ? 'auto' : 'auto' }} // Adjust margin for mobile
-      disabled={!isWordsLoaded}
+      sx={{ mt: isMobile ? 1 : 2, width: isMobile ? 'auto' : 'auto' }}
+      disabled={!isWordsLoaded || isDefinitionLoading}
     >
       Reset Game
     </Button>
   );
 
-
   return (
     <Box
       sx={{
         display: 'flex',
-        flexDirection: isMobile ? 'column' : 'row', // Change direction based on mobile
+        flexDirection: isMobile ? 'column' : 'row',
         justifyContent: 'center',
         alignItems: 'center',
         minHeight: '100vh',
         overflowY: 'auto',
         backgroundColor: screenColor,
         transition: 'background-color 0.5s ease',
-        paddingY: isMobile ? '0px' : '20px', // Adjust padding for mobile
-        gap: isMobile ? 0 : 4, // Adjust gap for mobile
+        paddingY: isMobile ? '0px' : '20px',
+        gap: isMobile ? 0 : 4,
       }}
     >
-      {/* Mobile Order: Logo, Textfields, Keyboard, Buttons */}
       {isMobile ? (
         <>
           {logoSection}
           {textFieldsSection}
-          {keyboardSection} {/* Keyboard is a separate section on mobile */}
+          {keyboardSection}
           {controlsSection}
           {resetButton}
         </>
       ) : (
         <>
-          {/* Desktop Order: Textfields (Left), Controls & Keyboard (Right) */}
           <Stack
             direction="column"
-            sx={{ width: 'auto', maxWidth: '43ch', flexShrink: 0, alignItems: 'center' }} // Set textfields stack to auto width and center its content
+            sx={{ width: 'auto', maxWidth: '43ch', flexShrink: 0, alignItems: 'center' }}
             spacing={1}
           >
             {textFieldsSection}
@@ -538,13 +583,13 @@ export default function Home() {
 
           <Stack
             direction="column"
-            sx={{ flexShrink: 0, alignItems: 'center', width: 'auto', maxWidth: '100%' }} // Ensure right stack takes available width and centers content
+            sx={{ flexShrink: 0, alignItems: 'center', width: 'auto', maxWidth: '100%' }}
             spacing={2}
           >
             {logoSection}
             {controlsSection}
             {resetButton}
-            {keyboardSection} {/* Keyboard is part of the right stack on desktop */}
+            {keyboardSection}
           </Stack>
         </>
       )}
